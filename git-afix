@@ -1,0 +1,20 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+
+fixups=""
+for FILE in $(git --no-pager diff --name-only --cached); do
+    # TODO limit to last merge commit
+    REF=$(git log -n 1 --follow --no-merges --pretty="format:%H" -- "$FILE")
+    fixups+="$REF $FILE"$'\n'
+done
+
+# consolidate fixups of same ref to one fixup commit
+commits=$(echo "$fixups" | sort | sed 1d | awk 'BEGIN {ORS=""} {if (LAST!=$1) print "\n"$1; print " "$2; LAST=$1}' | sed 1d)
+
+while IFS= read -r LINE; do
+    REF=$(echo "$LINE" | awk '{print $1}')
+    FILES=$(echo "$LINE" | awk '{$1=""; print $0}')
+
+    echo "$FILES" | xargs git commit --fixup="$REF" --
+done <<< "$commits"
