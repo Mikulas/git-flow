@@ -1,0 +1,130 @@
+#!/usr/bin/env php
+<?php
+
+$cblue = "\e[34m";
+$cgreen = "\e[32m";
+$cingreen = "\e[4;32m";
+$cred = "\e[31m";
+$cyellow = "\e[33m";
+$cnone = "\e[0m";
+
+exec("git for-each-ref --sort=-committerdate --format='%(objectname)%09%(refname)%09%(committerdate)%09%(authorname)%09%(HEAD)' refs/", $refs);
+
+$parsed = [];
+foreach ($refs as $line) {
+	list($sha, $ref, $rawTime, $author, $rawHead) = explode("\t", $line) + [NULL, NULL, NULL, NULL, ''];
+	$time = strToTime($rawTime);
+	$isHead = $rawHead === '*';
+
+	list($_, $type, $sub) = explode('/', $ref) + [NULL, NULL, NULL];
+	$short = substr($ref, strlen($type) + 6);
+	$parsed[$type][$sub][] = [$short, $time, $author, $isHead, $sha];
+}
+
+$keys = array_keys($parsed['heads']);
+unset($keys[array_search('pr', $keys)]);
+unset($keys[array_search('base', $keys)]);
+unset($keys[array_search('deprecated', $keys)]);
+unset($keys[array_search('master', $keys)]);
+array_unshift($keys, 'deprecated');
+array_unshift($keys, 'pr');
+array_unshift($keys, 'master');
+
+foreach ($keys as $i => $key) {
+	foreach ($parsed['heads'][$key] as list($short, $time, $author, $isHead, $sha)) {
+		if ($isHead) {
+			echo "* $cingreen$short";
+		} else {
+			echo "$cgreen  $short";
+		}
+		echo $cnone;
+
+		$delta = (time() - $time) / 3600;
+		if ($delta < 48) {
+			echo ' ' . round($delta) . ' hours ago';
+		}
+
+		$hasRemote = FALSE;
+		foreach ($parsed['remotes']['origin'] as $row) {
+			if ($row[0] === "origin/$short") {
+				if ($row[4] !== $sha) {
+					echo "$cred remote left behind$cnone";
+				}
+				$hasRemote = TRUE;
+				break;
+			}
+		}
+		if (!$hasRemote) {
+			echo "$cyellow no remote$cnone";
+		}
+
+		foreach ($parsed['heads']['base'] as $row) {
+			$baseShort = str_replace('pr/', 'base/', $short);
+			if ($row[0] === "$baseShort") {
+				$on = findClosestPrBranch($baseShort, $short);
+				echo "$cred based on $on$cnone";
+				break;
+			}
+		}
+
+		if ($author !== 'Mikulas') {
+			echo "$cblue $author$cnone";
+		}
+
+		if (isMerged($short)) {
+			echo "$cblue merged into master$cnone";
+		}
+
+		echo "\n";
+	}
+
+	if ($i + 1 !== count($keys)) {
+		echo "\n";
+	}
+}
+
+function findClosestPrBranch($baseBranch, $prBranch)
+{
+	exec('git show-ref ' . escapeshellarg($baseBranch), $lines);
+	$line = array_pop($lines);
+	list($sha) = explode(' ', $line);
+
+	$lines = [];
+	exec('git branch --contains ' . escapeshellarg($sha) . " 'pr/*' | sed 's/^\*/ /'", $lines);
+
+	$min = PHP_INT_MAX;
+	$pick = NULL;
+	foreach ($lines as $branch) {
+		$branch = trim($branch);
+		if ($branch == $prBranch) {
+			continue;
+		}
+
+		exec('git rev-list ' . escapeshellarg($branch) . '..' . escapeshellarg($baseBranch), $out);
+		if (count($out) < $min) {
+			$pick = $branch;
+			$min = count($out);
+		}
+	}
+
+	exec('git rev-list ' . escapeshellarg('master') . '..' . escapeshellarg($baseBranch), $out);
+	if (count($out) < $min) {
+		return 'master';
+	}
+
+	return $pick;
+}
+
+function isMerged($branch) {
+	global $cache;
+	if (!$cache) {
+		exec('git branch --merged master', $cache);
+		foreach ($cache as &$row) {
+			$row = trim($row);
+		}
+	}
+	if ($branch === 'master') {
+		return FALSE;
+	}
+	return in_array($branch, $cache);
+}
