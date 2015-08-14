@@ -1,7 +1,9 @@
 #!/usr/bin/env php
 <?php
 
+$cwhite = "\e[97m";
 $cblue = "\e[34m";
+$clight = "\e[37m";
 $cgreen = "\e[32m";
 $cingreen = "\e[4;32m";
 $cred = "\e[31m";
@@ -26,9 +28,9 @@ unset($keys[array_search('pr', $keys)]);
 unset($keys[array_search('base', $keys)]);
 unset($keys[array_search('deprecated', $keys)]);
 unset($keys[array_search('master', $keys)]);
-array_unshift($keys, 'deprecated');
 array_unshift($keys, 'pr');
 array_unshift($keys, 'master');
+array_push($keys, 'deprecated');
 
 foreach ($keys as $i => $key) {
 	foreach ($parsed['heads'][$key] as list($short, $time, $author, $isHead, $sha)) {
@@ -75,6 +77,15 @@ foreach ($keys as $i => $key) {
 			echo "$cblue merged into master$cnone";
 		}
 
+		if ($key === 'pr') {
+			//echo " ";
+			foreach (findPr($short) as $pr) {
+				echo " {$clight}[$pr]$cnone";
+				echo " {$cwhite}https://github.com/manGoweb/pixmate/pull/{$pr}{$cnone}";
+				break;
+			}
+		}
+
 		echo "\n";
 	}
 
@@ -113,6 +124,24 @@ function findClosestPrBranch($baseBranch, $prBranch)
 	}
 
 	return $pick;
+}
+
+function findPr($branch) {
+	exec('git show-ref ' . escapeshellarg($branch), $lines);
+	$line = array_pop($lines);
+	list($sha) = explode(' ', $line);
+
+	$lines = [];
+	exec('git branch -r --contains ' . escapeshellarg($sha) . " 'origin/pr/*'", $lines);
+	$prs = [];
+	foreach ($lines as $line) {
+		$num = substr(trim($line), strlen('origin/pr/'));
+		if ((string) $num !== (string)(int) $num) {
+			continue;
+		}
+		$prs[] = $num;
+	}
+	return $prs;
 }
 
 function isMerged($branch) {
