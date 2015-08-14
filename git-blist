@@ -28,11 +28,18 @@ unset($keys[array_search('pr', $keys)]);
 unset($keys[array_search('base', $keys)]);
 unset($keys[array_search('deprecated', $keys)]);
 unset($keys[array_search('master', $keys)]);
+unset($keys[array_search('tmp', $keys)]);
+unset($keys[array_search('integration', $keys)]);
 array_unshift($keys, 'pr');
+array_unshift($keys, 'tmp');
+array_unshift($keys, 'integration');
 array_unshift($keys, 'master');
 array_push($keys, 'deprecated');
 
 foreach ($keys as $i => $key) {
+	if (!isset($parsed['heads'][$key])) {
+		continue;
+	}
 	foreach ($parsed['heads'][$key] as list($short, $time, $author, $isHead, $sha)) {
 		if ($isHead) {
 			echo "* $cingreen$short";
@@ -77,7 +84,7 @@ foreach ($keys as $i => $key) {
 			echo "$cblue merged into master$cnone";
 		}
 
-		if ($key === 'pr') {
+		if (in_array('-v', $argv) && $key === 'pr') {
 			//echo " ";
 			foreach (findPr($short) as $pr) {
 				echo " {$clight}[$pr]$cnone";
