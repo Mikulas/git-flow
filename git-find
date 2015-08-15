@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+
+if [[ $# -ne 1 ]]; then
+	echo "usage: git find <method>"
+	echo
+	echo "<method> can be \"App\Model\PhotographersMapper::findAll\""
+	exit 129
+fi
+
+method=${1##*::}
+fqn=${1%%::*}
+class=${fqn##*\\}
+ns=$(echo "$fqn" | sed "s/\\\\$class\$//" | sed -e 's/[\/&]/\\&/g')
+
+for FILE in $(grep -r . --exclude-dir '.git' -l -e "namespace\s\+$ns\s*;"); do
+	cat "$FILE" | grep -e "\bclass\s\+$class\b" >/dev/null \
+		&& git log -L ":${method}:${FILE}" \
+		|| true
+done
